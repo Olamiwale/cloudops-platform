@@ -4,6 +4,8 @@ import { envValidationSchema } from './config/env.validation';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { WebsocketModule } from './websocket/websocket.module';
+import { UsersModule } from './users/users.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -15,6 +17,8 @@ import { WebsocketModule } from './websocket/websocket.module';
     PrismaModule,
     RedisModule,
     WebsocketModule,
+    UsersModule,
+    AuthModule,
   ],
 })
 export class AppModule {}
