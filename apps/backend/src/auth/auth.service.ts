@@ -29,6 +29,9 @@ export class AuthService {
     return this.issueTokens(user.id, user.email, user.role);
   }
 
+
+  
+
   async refresh(userId: string, refreshToken: string) {
     const stored = await this.redisService.get(`refresh:${userId}`);
     if (!stored || stored !== refreshToken) {
