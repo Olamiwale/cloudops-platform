@@ -1,0 +1,10 @@
+# root .gitignore
+node_modules/
+.turbo/
+.env
+.env.local
+dist/
+build/
+.DS_Store
+*.log
+pnpm-debug.log*
