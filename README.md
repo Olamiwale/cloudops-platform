@@ -20,52 +20,13 @@ A self-hosted DevOps platform for connecting Kubernetes clusters, managing workl
    ├── pnpm-workspace.yaml
    └── turbo.json
    ```
-2. Root `package.json`:
-   ```json
-   {
-     "name": "cloudops-platform",
-     "version": "1.0.0",
-     "private": true,
-     "packageManager": "pnpm@9.6.0",
-     "scripts": {
-       "build": "turbo run build",
-       "dev": "turbo run dev"
-     },
-     "devDependencies": {
-       "turbo": "^2.0.0"
-     }
-   }
-   ```
-   > The `packageManager` field is **required** by Turborepo — without it, `turbo run dev` fails with `Could not resolve workspace`.
+2. setting up a Root `package.json`, that controls the both apps(frontend and backend):
+ 
+3. A `turbo.json`: that run both backend and frontend
 
-3. `turbo.json`:
-   ```json
-   {
-     "$schema": "https://turbo.build",
-     "tasks": {
-       "build": {
-         "dependsOn": ["^build"],
-         "outputs": ["dist/**"]
-       },
-       "dev": {
-         "cache": false,
-         "persistent": true
-       }
-     }
-   }
-   ```
 
-**Sample response (success):**
-```
-$ pnpm --version
-9.6.0
-```
-No output errors — this confirms pnpm is installed and the version matches what you put in `packageManager`.
-
----
 
 ## Stage 2 — Frontend Scaffold (Vite)
-
 
 **Steps:**
 ```bash
@@ -78,61 +39,20 @@ pnpm install
 ```bash
 pnpm add -D @tailwindcss/vite
 ```
-
-`vite.config.ts`:
-```ts
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
-import path from 'path'
-
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: { "@": path.resolve(__dirname, "./src") },
-  },
-})
-```
-
 `src/index.css`:
 ```css
-@import "tailwindcss";
-```
 
 **Add path alias to `tsconfig.app.json`:**
 ```jsonc
-{
-  "compilerOptions": {
-    "paths": { "@/*": ["./src/*"] },
-    "jsx": "react-jsx"
-    // do NOT include "baseUrl" — deprecated under moduleResolution: "bundler"
-  }
-}
-```
 
 **Install shadcn/ui:**
-```bash
+```
 pnpm dlx shadcn@latest init
-# Selected Base (Recommended) library → Vega preset
 pnpm dlx shadcn@latest add button
 ```
-> Use `pnpm dlx`, not `npx` — the shadcn CLI's own install step doesn't understand pnpm's `workspace:*` protocol and will fail with `EUNSUPPORTEDPROTOCOL` under `npx`.
-
-**Install TanStack Query:**
-```bash
-pnpm add @tanstack/react-query axios
-```
-**Sample response (success) — dev server boot:**
-
-```
-$ pnpm --filter frontend dev
-  VITE v6.x.x  ready in 320 ms
-  ➜  Local:   http://localhost:5173/
-```
 
 
 
----
 
 ## Stage 3 — Backend Scaffold (NestJS)
 
@@ -296,57 +216,7 @@ npx prisma init
 ```
 
 **`prisma/schema.prisma`** (Prisma 7+ — no `url` in the datasource block; connection info lives in `prisma.config.ts` for the CLI and is passed as an `adapter` at runtime):
-```prisma
-generator client {
-  provider = "prisma-client-js"
-}
 
-datasource db {
-  provider = "postgresql"
-}
-
-model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String?
-  role      Role     @default(USER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  clusters  Cluster[]
-  auditLogs AuditLog[]
-}
-
-enum Role {
-  ADMIN
-  USER
-}
-
-model Cluster {
-  id              String   @id @default(uuid())
-  name            String
-  encryptedConfig String   // encrypted kubeconfig/token blob
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  owner     User       @relation(fields: [ownerId], references: [id])
-  ownerId   String
-  auditLogs AuditLog[]
-}
-
-model AuditLog {
-  id        String   @id @default(uuid())
-  action    String
-  metadata  Json?
-  createdAt DateTime @default(now())
-
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  cluster   Cluster? @relation(fields: [clusterId], references: [id])
-  clusterId String?
-}
-```
 
 **`prisma.config.ts`** (used by the CLI for migrations):
 ```ts
@@ -366,42 +236,7 @@ import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 
-@Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  constructor() {
-    const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
-    super({ adapter });
-  }
 
-  async onModuleInit() { await this.$connect(); }
-  async onModuleDestroy() { await this.$disconnect(); }
-}
-```
-
-**`src/prisma/prisma.module.ts`:**
-```ts
-import { Global, Module } from '@nestjs/common';
-import { PrismaService } from './prisma.service';
-
-@Global()
-@Module({
-  providers: [PrismaService],
-  exports: [PrismaService],
-})
-export class PrismaModule {}
-```
-
-**Run the migration:**
-```bash
-npx prisma generate
-npx prisma migrate dev --name init
-```
-
-**Sample response (success):**
-```
-Your database is now in sync with your schema.
-✔ Generated Prisma Client
-```
 
 ---
 
@@ -412,23 +247,7 @@ Your database is now in sync with your schema.
 pnpm add ioredis
 ```
 
-**`src/redis/redis.service.ts`:**
-```ts
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import Redis from 'ioredis';
 
-@Injectable()
-export class RedisService extends Redis implements OnModuleDestroy {
-  constructor(private configService: ConfigService) {
-    super({
-      host: configService.get<string>('REDIS_HOST'),
-      port: configService.get<number>('REDIS_PORT'),
-    });
-  }
-  onModuleDestroy() { this.disconnect(); }
-}
-```
 
 `src/redis/redis.module.ts` — same `@Global()` pattern as Prisma, exporting `RedisService`.
 
@@ -449,35 +268,11 @@ pnpm add -D @types/passport-jwt @types/bcrypt
 ```
 
 **`src/auth/strategies/jwt.strategy.ts`:**
-```ts
-import { Injectable } from '@nestjs/common';
-import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
-import { ConfigService } from '@nestjs/config';
 
-@Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(configService: ConfigService) {
-    super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET')!,
-    });
-  }
-  async validate(payload: { sub: string; email: string; role: string }) {
-    return { userId: payload.sub, email: payload.email, role: payload.role };
-  }
-}
-```
 
 **`src/common/guards/jwt-auth.guard.ts`:**
 ```ts
-import { Injectable } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 
-@Injectable()
-export class JwtAuthGuard extends AuthGuard('jwt') {}
-```
 
 **Core logic — `src/auth/auth.service.ts`:** register, login, refresh, logout. Access + refresh tokens are signed with separate secrets; the refresh token is stored in Redis (`refresh:<userId>`) so `logout()` can actually revoke it.
 
@@ -489,18 +284,7 @@ app.enableCors({ origin: 'http://localhost:5173', credentials: true });
 
 **Sample response (success) — register:**
 ```bash
-curl -X POST http://localhost:3000/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123","name":"Test User"}'
-```
-```json
-{ "accessToken": "eyJhbGciOi...", "refreshToken": "eyJhbGciOi..." }
-```
 
-**Sample response (expected, not a bug) — registering the same email twice:**
-```json
-{ "statusCode": 409, "message": "Email already in use" }
-```
 
 ---
 

@@ -4,9 +4,9 @@ services:
     container_name: cloudops-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: cloudops
-      POSTGRES_PASSWORD: cloudops_dev_password
-      POSTGRES_DB: cloudops
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - '5432:5432'
     volumes:
@@ -21,6 +21,31 @@ services:
     volumes:
       - redis_data:/data
 
+backend:
+    build: ./apps/backend
+    ports:
+      - '3000:3000'
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - ./apps/backend/.env
+
+frontend:
+    build: ./apps/frontend
+    ports:
+      - '3001:3001'
+    depends_on:
+      - backend
+    env_file:
+      - ./apps/frontend/.env
+
 volumes:
   postgres_data:
   redis_data:
+
+
+
+
+
+  
